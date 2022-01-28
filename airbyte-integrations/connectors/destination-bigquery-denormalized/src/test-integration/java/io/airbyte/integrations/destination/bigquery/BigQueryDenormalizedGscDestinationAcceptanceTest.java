@@ -306,7 +306,14 @@ public class BigQueryDenormalizedGscDestinationAcceptanceTest extends Destinatio
 
     final String defaultSchema = getDefaultSchema(config);
     final List<AirbyteRecordMessage> actualMessages = retrieveNormalizedRecords(catalog, defaultSchema);
+    datesField = getDateTimeFieldsFormat(catalog.getStreams());
+    modifyData(messages, datesField);
     assertSameMessages(messages, actualMessages, true);
+  }
+
+  @Override
+  public boolean requiresDateTimeModification() {
+    return true;
   }
 
 }

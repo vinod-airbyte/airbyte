@@ -15,10 +15,16 @@ import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.base.ssh.SshBastionContainer;
 import io.airbyte.integrations.base.ssh.SshTunnel;
 import io.airbyte.integrations.destination.ExtendedNameTransformer;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -117,6 +123,7 @@ public abstract class SshPostgresDestinationAcceptanceTest extends DestinationAc
   }
 
   private List<JsonNode> retrieveRecordsFromTable(final String tableName, final String schemaName) throws Exception {
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
     final JsonNode config = getConfig();
     return SshTunnel.sshWrap(
         config,
@@ -172,13 +179,27 @@ public abstract class SshPostgresDestinationAcceptanceTest extends DestinationAc
   }
 
   @Override
-  public boolean shouldBeModified() {
+  public boolean requiresDateTimeModification() {
     return true;
   }
 
   @Override
-  public String messagesFileName() {
-    return "expected/postgres_expected_datetime_messages.txt";
+  public void modify(ObjectNode data, Map<String, String> datesField) {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if (datesField.containsKey(key)) {
+        switch (datesField.get(key)) {
+          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsedPostgres(field.getValue().asText()));
+          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToDateFormat(field.getValue().asText()));
+        }
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
   }
+
 
 }

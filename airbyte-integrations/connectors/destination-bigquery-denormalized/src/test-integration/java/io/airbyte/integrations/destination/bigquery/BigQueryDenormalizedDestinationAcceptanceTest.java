@@ -289,4 +289,9 @@ public class BigQueryDenormalizedDestinationAcceptanceTest extends DestinationAc
     assertSameMessages(messages, actualMessages, true);
   }
 
+  @Override
+  public boolean requiresDateTimeModification() {
+    return true;
+  }
+
 }

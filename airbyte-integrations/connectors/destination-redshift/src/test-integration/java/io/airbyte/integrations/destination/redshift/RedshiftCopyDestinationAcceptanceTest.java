@@ -8,15 +8,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.airbyte.commons.io.IOs;
 import io.airbyte.commons.json.Jsons;
-import io.airbyte.commons.resources.MoreResources;
 import io.airbyte.commons.string.Strings;
 import io.airbyte.db.Database;
 import io.airbyte.db.Databases;
 import io.airbyte.db.jdbc.JdbcUtils;
 import io.airbyte.integrations.base.JavaBaseConstants;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
-import io.airbyte.protocol.models.AirbyteMessage;
-import io.airbyte.protocol.models.AirbyteMessage.Type;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
@@ -164,31 +162,26 @@ public class RedshiftCopyDestinationAcceptanceTest extends DestinationAcceptance
 
 
   @Override
-  public boolean shouldBeModified() {
+  public boolean requiresDateTimeModification() {
     return true;
   }
 
   @Override
-  public String messagesFileName() {
-    return "expected/redshift_expected_datetime_messages.txt";
+  public void modify(ObjectNode data, Map<String, String> datesField) throws IOException {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if (datesField.containsKey(key)) {
+        switch (datesField.get(key)) {
+          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsedRedshift(field.getValue().asText()));
+          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToDateFormat(field.getValue().asText()));
+        }
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
   }
-//
-//  @Override
-//  public void modify(ObjectNode data, Map<String, String> datesField) throws IOException {
-//    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
-//        Spliterator.ORDERED), false).toList();
-//    data.removeAll();
-//    fields.forEach(field -> {
-//      var key = field.getKey();
-//      if (datesField.containsKey(key)) {
-//        switch (datesField.get(key)) {
-//          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsed2(field.getValue().asText()));
-//          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToGeneralDateFormat3(field.getValue().asText()));
-//        }
-//      } else {
-//        data.set(key.toLowerCase(), field.getValue());
-//      }
-//    });
-//  }
 
 }

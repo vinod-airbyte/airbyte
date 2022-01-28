@@ -17,11 +17,16 @@ import io.airbyte.db.jdbc.JdbcUtils;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.base.ssh.SshTunnel;
 import io.airbyte.integrations.destination.ExtendedNameTransformer;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.apache.commons.lang3.RandomStringUtils;
 
 /**
@@ -106,6 +111,26 @@ public abstract class SshMySQLDestinationAcceptanceTest extends DestinationAccep
       result.add(resolved.toUpperCase());
     }
     return result;
+  }
+
+  @Override
+  public boolean requiresDateTimeModification() {
+    return true;
+  }
+
+  @Override
+  public void modify(ObjectNode data, Map<String, String> datesField) {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if ("date".equals(datesField.get(key))) {
+        data.put(key.toLowerCase(), DateTimeUtils.convertToDateFormat(field.getValue().asText()));
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
   }
 
   private static Database getDatabaseFromConfig(final JsonNode config) {

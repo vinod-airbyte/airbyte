@@ -26,6 +26,7 @@ import io.airbyte.commons.json.Jsons;
 import io.airbyte.commons.string.Strings;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.StandardNameTransformer;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
 import io.airbyte.protocol.models.AirbyteCatalog;
 import io.airbyte.protocol.models.AirbyteMessage;
@@ -229,66 +230,39 @@ public class BigQueryDestinationAcceptanceTest extends DestinationAcceptanceTest
   }
 
   @Override
-  public boolean shouldBeModified() {
+  public boolean requiresDateTimeModification() {
     return true;
   }
 
   @Override
-  public String messagesFileName() {
-    return "expected/bigquery_expected_datetime_messages.txt";
+  public void modify(ObjectNode data, Map<String, String> datesField) {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if (datesField.containsKey(key)) {
+        switch (datesField.get(key)) {
+          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getEpochMicros(field.getValue().asText()));
+          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToGeneralDateFormat(field.getValue().asText()));
+        }
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
+
   }
-//
-//  @Override
-//  public void modify(ObjectNode data, Map<String, String> datesField) {
-//    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
-//        Spliterator.ORDERED), false).toList();
-//    data.removeAll();
-//    fields.forEach(field -> {
-//      var key = field.getKey();
-//      if (datesField.containsKey(key)) {
-//        switch (datesField.get(key)) {
-//          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getEpochMicros(field.getValue().asText()));
-//          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToGeneralDateFormat(field.getValue().asText()));
-//        }
-//      } else {
-//        data.set(key.toLowerCase(), field.getValue());
-//      }
-//    });
-//
-//  }
 
-  //  @Override
-//  protected void sortDataFields(JsonNode data, boolean isExpected) {
-//    var sortedFields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
-//            Spliterator.ORDERED), false)
-//        .sorted(Entry.comparingByKey(Comparator.comparing(String::toLowerCase))).toList();
-//    ((ObjectNode) data).removeAll();
-//    IntStream.range(0, sortedFields.size())
-//        .forEach(i -> modify(i, sortedFields, (ObjectNode) data, isExpected));
-//  }
-//
-//  private void modify(int i, List<Entry<String, JsonNode>> data, ObjectNode result, boolean isExpected) {
-//    var key = data.get(i).getKey();
-//    if (isExpected && datesField.containsKey(key)) {
-//      switch (datesField.get(key)) {
-//        case "date-time" -> result.put(key.toLowerCase(), DateTimeUtils.getEpochMicros(data.get(i).getValue().asText()));
-//        case "date" -> result.put(key.toLowerCase(), DateTimeUtils.convertToGeneralDateFormat(data.get(i).getValue().asText()));
-//      }
-//    } else {
-//      result.set(key.toLowerCase(), data.get(i).getValue());
-//    }
-//  }
-
-//  @Override
-//  protected void assertSameValue(String key,
-//                                 JsonNode expectedValue,
-//                                 JsonNode actualValue) {
-//    switch (datesField.getOrDefault(key, StringUtils.EMPTY)) {
-////      case "date" -> assertEquals2(DateTimeUtils.convertToGeneralDateFormat(expectedValue.asText()), actualValue.asText());
-//      case "date-time" -> assertEqualsObjects(expectedValue.asLong()/1000000, actualValue.asLong());
-//      default -> super.assertSameValue(key, expectedValue, actualValue);
-//    }
-//  }
+  @Override
+  protected void assertSameValue(String key,
+                                 JsonNode expectedValue,
+                                 JsonNode actualValue) {
+    if ("date-time".equals(datesField.getOrDefault(key, StringUtils.EMPTY))) {
+      assertEqualsObjects(expectedValue.asLong() / 1000000, actualValue.asLong());
+    } else {
+      super.assertSameValue(key, expectedValue, actualValue);
+    }
+  }
 
   protected void tearDownBigQuery() {
     // allows deletion of a dataset that has contents

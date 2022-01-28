@@ -5,17 +5,24 @@
 package io.airbyte.integrations.destination.postgres;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.ImmutableMap;
 import io.airbyte.commons.json.Jsons;
 import io.airbyte.db.Databases;
 import io.airbyte.db.jdbc.JdbcUtils;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.ExtendedNameTransformer;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 public class PostgresDestinationAcceptanceTest extends DestinationAcceptanceTest {
@@ -122,6 +129,7 @@ public class PostgresDestinationAcceptanceTest extends DestinationAcceptanceTest
   protected void setup(final TestDestinationEnv testEnv) {
     db = new PostgreSQLContainer<>("postgres:13-alpine");
     db.start();
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
   }
 
   @Override
@@ -131,12 +139,25 @@ public class PostgresDestinationAcceptanceTest extends DestinationAcceptanceTest
   }
 
   @Override
-  public boolean shouldBeModified() {
+  public boolean requiresDateTimeModification() {
     return true;
   }
 
   @Override
-  public String messagesFileName() {
-    return "expected/postgres_expected_datetime_messages.txt";
+  public void modify(ObjectNode data, Map<String, String> datesField) {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if (datesField.containsKey(key)) {
+        switch (datesField.get(key)) {
+          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsedPostgres(field.getValue().asText()));
+          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToDateFormat(field.getValue().asText()));
+        }
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
   }
 }

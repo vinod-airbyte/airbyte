@@ -14,11 +14,16 @@ import io.airbyte.db.Databases;
 import io.airbyte.db.jdbc.JdbcUtils;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.ExtendedNameTransformer;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.testcontainers.containers.MSSQLServerContainer;
@@ -107,6 +112,29 @@ public class MSSQLDestinationAcceptanceTest extends DestinationAcceptanceTest {
       result.add(resolved.toUpperCase());
     }
     return result;
+  }
+
+  @Override
+  public boolean requiresDateTimeModification() {
+    return false;
+  }
+
+  @Override
+  public void modify(ObjectNode data, Map<String, String> datesField) {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if (datesField.containsKey(key)) {
+        switch (datesField.get(key)) {
+          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsedMSSQL(field.getValue().asText()));
+          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToDateFormat(field.getValue().asText()));
+        }
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
   }
 
   private List<JsonNode> retrieveRecordsFromTable(final String tableName, final String schemaName) throws SQLException {

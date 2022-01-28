@@ -18,6 +18,7 @@ import io.airbyte.db.jdbc.JdbcUtils;
 import io.airbyte.integrations.base.JavaBaseConstants;
 import io.airbyte.integrations.destination.ExtendedNameTransformer;
 import io.airbyte.integrations.standardtest.destination.DataArgumentsProvider;
+import io.airbyte.integrations.standardtest.destination.DateTimeUtils;
 import io.airbyte.integrations.standardtest.destination.DestinationAcceptanceTest;
 import io.airbyte.protocol.models.AirbyteCatalog;
 import io.airbyte.protocol.models.AirbyteMessage;
@@ -126,32 +127,27 @@ public class SnowflakeInsertDestinationAcceptanceTest extends DestinationAccepta
   }
 
   @Override
-  public boolean shouldBeModified() {
+  public boolean requiresDateTimeModification() {
     return true;
   }
 
   @Override
-  public String messagesFileName() {
-    return "expected/snowflake_expected_datetime_messages.txt";
+  public void modify(ObjectNode data, Map<String, String> datesField) {
+    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
+        Spliterator.ORDERED), false).toList();
+    data.removeAll();
+    fields.forEach(field -> {
+      var key = field.getKey();
+      if (datesField.containsKey(key)) {
+        switch (datesField.get(key)) {
+          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsedSnowflake(field.getValue().asText()));
+          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToDateFormatWithZeroTime(field.getValue().asText()));
+        }
+      } else {
+        data.set(key.toLowerCase(), field.getValue());
+      }
+    });
   }
-//
-//  @Override
-//  public void modify(ObjectNode data, Map<String, String> datesField) {
-//    var fields = StreamSupport.stream(Spliterators.spliteratorUnknownSize(data.fields(),
-//        Spliterator.ORDERED), false).toList();
-//    data.removeAll();
-//    fields.forEach(field -> {
-//      var key = field.getKey();
-//      if (datesField.containsKey(key)) {
-//        switch (datesField.get(key)) {
-//          case "date-time" -> data.put(key.toLowerCase(), DateTimeUtils.getParsed(field.getValue().asText()));
-//          case "date" -> data.put(key.toLowerCase(), DateTimeUtils.convertToGeneralDateFormat2(field.getValue().asText()));
-//        }
-//      } else {
-//        data.set(key.toLowerCase(), field.getValue());
-//      }
-//    });
-//  }
 
   private List<JsonNode> retrieveRecordsFromTable(final String tableName, final String schema) throws SQLException {
     return SnowflakeDatabase.getDatabase(getConfig()).bufferedResultSetQuery(
